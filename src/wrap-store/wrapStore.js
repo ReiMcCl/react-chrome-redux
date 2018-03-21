@@ -2,6 +2,7 @@ import {
   DISPATCH_TYPE,
   STATE_TYPE,
   PATCH_STATE_TYPE,
+  PORT_INITIALIZED
 } from '../constants';
 
 import shallowDiff from './shallowDiff';
@@ -38,6 +39,9 @@ export default (store, {
     throw new Error('portName is required in options');
   }
 
+  const PORT_LIST = {};
+  let portCount = 0;
+
   // set dispatch responder as promise responder
   if (!dispatchResponder) {
     dispatchResponder = promiseResponder;
@@ -66,6 +70,25 @@ export default (store, {
     }
   };
 
+  const addPort = (port, subState = {}) => {
+    const portI = getPortIndex();
+
+    PORT_LIST[portI] = {
+      port: port,
+      subState: subState
+    };
+
+    return portI;
+  }
+
+  const getPortIndex = () => {
+    return portCount++;
+  }
+
+  const removePort = (port) => {
+    delete PORT_LIST[port.id];
+  }
+
   /**
   * Setup for state updates
   */
@@ -73,6 +96,8 @@ export default (store, {
     if (port.name !== portName) {
       return;
     }
+
+    const portI = addPort(port, {});
 
     let prevState = store.getState();
 
@@ -93,13 +118,21 @@ export default (store, {
     // Send patched state down connected port on every redux store state change
     const unsubscribe = store.subscribe(patchState);
 
+    const disconnectState = (port) => {
+      removePort(port);
+      unsubscribe(port);
+    }
+
     // when the port disconnects, unsubscribe the sendState listener
-    port.onDisconnect.addListener(unsubscribe);
+    port.onDisconnect.addListener(disconnectState);
 
     // Send store's initial state through port
     port.postMessage({
-      type: STATE_TYPE,
-      payload: prevState,
+      type: PORT_INITIALIZED,
+      payload: {
+        portIndex: portI,
+        prevState: prevState
+      }
     });
   };
 

@@ -6,6 +6,7 @@ import {
   PATCH_STATE_TYPE,
   DIFF_STATUS_UPDATED,
   DIFF_STATUS_REMOVED,
+  PORT_INITIALIZED,
 } from '../constants';
 
 const backgroundErrPrefix = '\nLooks like there is an error in the background page. ' +
@@ -16,7 +17,7 @@ class Store {
    * Creates a new Proxy store
    * @param  {object} options An object of form {portName, state, extensionId}, where `portName` is a required string and defines the name of the port for state transition changes, `state` is the initial state of this store (default `{}`) `extensionId` is the extension id as defined by chrome when extension is loaded (default `''`)
    */
-  constructor({portName, state = {}, extensionId = ''}) {
+  constructor({ portName, state = {}, extensionId = '' }) {
     if (!portName) {
       throw new Error('portName is required in options');
     }
@@ -26,11 +27,13 @@ class Store {
     this.readyPromise = new Promise(resolve => this.readyResolve = resolve);
 
     this.extensionId = extensionId; // keep the extensionId as an instance variable
-    this.port = chrome.runtime.connect(this.extensionId, {name: portName});
+    this.port = chrome.runtime.connect(this.extensionId, { name: portName });
     this.listeners = [];
     this.state = state;
 
     this.port.onMessage.addListener(message => {
+      console.log(message);
+
       switch (message.type) {
         case STATE_TYPE:
           this.replaceState(message.payload);
@@ -45,8 +48,12 @@ class Store {
           this.patchState(message.payload);
           break;
 
+        case PORT_INITIALIZED:
+          this.portIndex = message.payload.portIndex;
+          break;
+
         default:
-          // do nothing
+        // do nothing
       }
     });
 
@@ -86,7 +93,7 @@ class Store {
   patchState(difference) {
     const state = Object.assign({}, this.state);
 
-    difference.forEach(({change, key, value}) => {
+    difference.forEach(({ change, key, value }) => {
       switch (change) {
         case DIFF_STATUS_UPDATED:
           state[key] = value;
@@ -97,7 +104,7 @@ class Store {
           break;
 
         default:
-          // do nothing
+        // do nothing
       }
     });
 
@@ -145,7 +152,7 @@ class Store {
           portName: this.portName,
           payload: data
         }, (resp) => {
-          const {error, value} = resp;
+          const { error, value } = resp;
 
           if (error) {
             const bgErr = new Error(`${backgroundErrPrefix}${error}`);
